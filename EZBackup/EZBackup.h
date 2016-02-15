@@ -62,6 +62,33 @@ struct FileStats
 };
 
 
+//---------------------------------------------------------------------------------------------------------
+int addEntryToDidntCopyFile(string message)
+{
+	FILE * pFile;
+	pFile = fopen("didntCopy.txt", "a");
+	if (pFile == NULL)
+		return -1;
+
+	fputs(message.c_str(), pFile);
+	fclose(pFile);
+
+	return 0;
+}
+
+int addEntryToCopyFile(string message)
+{
+	FILE * pFile;
+	pFile = fopen("copy.txt", "a");
+	if (pFile == NULL)
+		return -1;
+
+	fputs(message.c_str(), pFile);
+	fclose(pFile);
+
+	return 0;
+}
+
 long GetFileSize(std::string filename)
 {
 	struct stat stat_buf;
@@ -80,7 +107,12 @@ string createMD5Hash(string fileName)
 	//Find length of file
 	inputFile.seekg(0, std::ios::end);
 	long len = inputFile.tellg();
+
+	if (len < 1)
+		return "error";
+
 	inputFile.seekg(0, std::ios::beg);
+	
 
 	//read in the data from your file
 	char * InFileData = new char[len];
@@ -297,22 +329,28 @@ void checkRepo(vector<string> &listOfDirs)
 				{
 					if (!MoveFileA(curFiles[j].c_str(), dest.c_str()))
 					{
-						string err = ("Error moving file: " + to_string(GetLastError()));
-						MessageBox(NULL, err.c_str(), NULL, NULL);
+						string err = ("Error moving file: " + curFiles[j] + "  " + to_string(GetLastError()));
+						//MessageBox(NULL, err.c_str(), NULL, NULL);
+						addEntryToDidntCopyFile(err);
 						continue;
 					}
+					else addEntryToCopyFile(curFiles[j]);
 				}
 				else
 				{
 					if (!CopyFile(curFiles[j].c_str(), dest.c_str(), failIfFileExist))
 					{
-						string err = ("Error moving file: " + to_string(GetLastError()));
-						MessageBox(NULL, err.c_str(), NULL, NULL);
+						string err = ("Error moving file: " +curFiles[j] +"  " + to_string(GetLastError()));
+						//MessageBox(NULL, err.c_str(), NULL, NULL);
+						addEntryToDidntCopyFile(err);
 						continue;
 					}
+					else addEntryToCopyFile(curFiles[j]);
 				}
 
 			}
+			else
+				addEntryToDidntCopyFile("already have: " + curFiles[j]);
 		}
 	}
 }
