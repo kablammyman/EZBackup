@@ -170,13 +170,26 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 			if (!doesRepoExist(destPath))
 				createRepo(destPath);
+			else
+			{	
+				if(destPath[destPath.size()] != '\\')
+					curRepoFile = (destPath + "\\"+REPO_NAME);
+				else curRepoFile = (destPath + REPO_NAME);
+				string output;
+				if (!db.openDataBase(curRepoFile))
+				{
+					MessageBox(NULL, "coudldnt open your old repo file", "Finihsed", MB_OK);
+					exit(-1);
+				}
+				db.setTableName("Repo");
+			}
+			vector<string> diskPAths;
 
-			vector<string> dbPAths;
-			
-		/*	thread getRepoSnapshot([&dbPAths]()
-			{
-			
-			});*/
+			MyFileDirDll::clearDirTree();
+			MyFileDirDll::addDirTree(srcPath,10);
+			MyFileDirDll::dumpTreeToVector("",diskPAths,false);
+
+			checkRepo(diskPAths);
 
 			//display finsihed message
 			// 6. with sprintf

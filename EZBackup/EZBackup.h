@@ -36,6 +36,9 @@ int baseX = 30, baseY = 20;
 int winWidth = 1000;
 int winHeight = 300;
 
+bool failIfFileExist = true;
+bool moveFile = false;
+
 using namespace std;
 
 string destPath;
@@ -202,14 +205,16 @@ bool doesRepoExist(string path)
 
 void createRepo(string path)
 {
-	string output;
 	curRepoFile = (path + "\\"+REPO_NAME);
-	db.openDataBase(curRepoFile, output);
-
+	if (!db.openDataBase(curRepoFile))
+	{
+		MessageBox(NULL, "coudldnt create a repo file", "Uh Oh...", MB_OK);
+		exit(-1);
+	}
 	if (!db.createTable("Repo", "fileName TEXT, hash TEXT, path TEXT, fileSize INTEGER, version INTEGER"))
 	{
-		MessageBox(0, db.getLastError().c_str(), "Oh Oh...", MB_ICONEXCLAMATION | MB_OK);
-		return;
+		MessageBox(0, db.getLastError().c_str(), "Uh Oh...", MB_ICONEXCLAMATION | MB_OK);
+		exit(-1);
 	}
 
 	MyFileDirDll::startDirTreeStep(path);
@@ -245,6 +250,7 @@ cout << "done";
 }
 
 
+
 void checkRepo(vector<string> &listOfDirs)
 {
 	for (size_t i = 0; i < listOfDirs.size(); i++)
@@ -256,13 +262,12 @@ void checkRepo(vector<string> &listOfDirs)
 
 		for (size_t j = 0; j < curFiles.size(); j++)
 		{
-			string curFilePath = (listOfDirs[i] + "\\" + curFiles[j]);
 			//dont add tis own repo.db to itself!
-			if (curFilePath == curRepoFile)
+			if (curFiles[j] == curRepoFile)
 				continue;
 
 			FileStats stats;
-			getFileStats(curFilePath, stats);
+			getFileStats(curFiles[j], stats);
 
 			string output;
 			string querey = "SELECT * FROM Repo WHERE hash = \"";
@@ -270,21 +275,47 @@ void checkRepo(vector<string> &listOfDirs)
 			querey += "\"";
 
 			db.executeSQL(querey, output);
+			//this is a new filoe, add it to the repo
 			if (output.empty())
 			{
 				string querey = stats.getInsertString();
 				if (!db.insertData(querey))
 				{
-					//MessageBox(0, db.getLastError().c_str(), "Oh Oh...", MB_ICONEXCLAMATION | MB_OK);
+					MessageBox(0, db.getLastError().c_str(), "Oh Oh...", MB_ICONEXCLAMATION | MB_OK);
+					continue;
 				}
+				string dest = curFiles[j];
+				size_t pos = curFiles[j].find(srcPath);
+				dest.replace(pos, srcPath.size(),destPath);
+
+				//add it to the dest path for the new location of the file
+				string addPath = MyFileDirDll::getPathFromFullyQualifiedPathString(dest);
+				SHCreateDirectoryEx(NULL, addPath.c_str(), NULL);
+
 				//now that info is in DB, move the file to the new dir
+				if (moveFile)
+				{
+					if (!MoveFileA(curFiles[j].c_str(), dest.c_str()))
+					{
+						string err = ("Error moving file: " + to_string(GetLastError()));
+						MessageBox(NULL, err.c_str(), NULL, NULL);
+						continue;
+					}
+				}
+				else
+				{
+					if (!CopyFile(curFiles[j].c_str(), dest.c_str(), failIfFileExist))
+					{
+						string err = ("Error moving file: " + to_string(GetLastError()));
+						MessageBox(NULL, err.c_str(), NULL, NULL);
+						continue;
+					}
+				}
 
 			}
 		}
 	}
 }
-vector<string> treeOnDisk;
-
 
 
 
@@ -292,7 +323,10 @@ void getRepoData(string path, vector<string> &dbPAths)
 {
 
 	//parse all the files in the "repo" and add them to the db if not in already
-	MyFileDirDll::addDirTree(path, 10);
+	string querey, output;
+	querey = "SELECT * FROM Repo";
+	db.executeSQL(querey, output);
+
 	sort(dbPAths.begin(), dbPAths.end());
 	
 }

@@ -19,7 +19,7 @@ public:
 	DataBase(std::string name);
 	DataBase();
 	~DataBase();
-	bool openDataBase(std::string name, std::string &output);
+	bool openDataBase(std::string name);
 	void closeDataBase(std::string &output);
 	std::string getLastError();
 	bool executeSQL(std::string command, std::string &output);

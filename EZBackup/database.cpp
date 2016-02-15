@@ -98,7 +98,7 @@ DataBase::DataBase(string name)
 	databaseName = "";
 	curTableName = "";
 	gettingData = false;
-	openDataBase(name, returnData);
+	openDataBase(name);
 }
 //--------------------------------------------------------------------------------------------------
 DataBase::~DataBase()
@@ -107,11 +107,11 @@ DataBase::~DataBase()
 	closeDataBase(output);
 }
 //--------------------------------------------------------------------------------------------------
- bool DataBase::openDataBase(string name, string &output)
+ bool DataBase::openDataBase(string name)
  {
 	 // Open Database
 	databaseName = name;
-	
+
 	if(name[name.size() -3] != '.' || name[name.size() -2] != 'd' || name[name.size() -1] != 'b')
 		name +=".db";
 
@@ -125,12 +125,11 @@ DataBase::~DataBase()
    if (returnCode)
    {
       string  errMsg = sqlite3_errmsg(db);
-	  output += ("Error opening SQLite3 database: " +errMsg + "\n");
+	  lastError = ("Error opening SQLite3 database: " +errMsg + "\n");
       sqlite3_close(db);
 	  return false;
    }
 
-   output += ("Opened " + name + "\n");
    lastError.clear();
    return true;
  }
