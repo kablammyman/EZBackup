@@ -38,6 +38,7 @@ int winHeight = 300;
 
 bool failIfFileExist = true;
 bool moveFile = false;
+bool overriteOnUpdate = false;
 
 using namespace std;
 
@@ -59,6 +60,30 @@ struct FileStats
 	{
 		return ("\"" + name + "\",\"" + hash + "\",\"" + path + "\"," + to_string(fileSize) + ",1");
 	};
+
+	string isHashInDB()
+	{
+		string output;
+		string querey = "SELECT * FROM Repo WHERE hash = \"";
+		querey += hash;
+		querey += "\"";
+		db.executeSQL(querey, output);
+		return output;
+	}
+
+	string isFileUpdated()
+	{
+		//check to see if we have an updated version of a file we have
+		string output;
+		string querey = "SELECT * FROM Repo WHERE fileName = \"";
+		querey += name;
+		querey += "\"";
+		querey = "AND path = \"";
+		querey += path;
+		querey += "\"";
+		db.executeSQL(querey, output);
+		return output;
+	}
 };
 
 
@@ -129,6 +154,7 @@ string createMD5Hash(string fileName)
 
 void getFileStats(string path, FileStats &stats)
 {
+	//path is the original path...where the file came from
 	stats.name = MyFileDirDll::getFileNameFromPathString(path);
 	stats.path = MyFileDirDll::getPathFromFullyQualifiedPathString(path);
 	stats.hash = createMD5Hash(path);
@@ -281,7 +307,16 @@ void createRepo(string path)
 cout << "done"; 
 }
 
+string getDestPathForFile(string curFile)
+{
+	string dest = curFile;
+	size_t pos = curFile.find(srcPath);
+	dest.replace(pos, srcPath.size(), destPath);
 
+	//add it to the dest path for the new location of the file
+	return dest;
+	
+}
 
 void checkRepo(vector<string> &listOfDirs)
 {
@@ -301,14 +336,8 @@ void checkRepo(vector<string> &listOfDirs)
 			FileStats stats;
 			getFileStats(curFiles[j], stats);
 
-			string output;
-			string querey = "SELECT * FROM Repo WHERE hash = \"";
-			querey += stats.hash;
-			querey += "\"";
-
-			db.executeSQL(querey, output);
 			//this is a new filoe, add it to the repo
-			if (output.empty())
+			if (stats.isHashInDB().empty())
 			{
 				string querey = stats.getInsertString();
 				if (!db.insertData(querey))
@@ -316,41 +345,55 @@ void checkRepo(vector<string> &listOfDirs)
 					MessageBox(0, db.getLastError().c_str(), "Oh Oh...", MB_ICONEXCLAMATION | MB_OK);
 					continue;
 				}
-				string dest = curFiles[j];
-				size_t pos = curFiles[j].find(srcPath);
-				dest.replace(pos, srcPath.size(),destPath);
-
-				//add it to the dest path for the new location of the file
-				string addPath = MyFileDirDll::getPathFromFullyQualifiedPathString(dest);
-				SHCreateDirectoryEx(NULL, addPath.c_str(), NULL);
+				
+				//checl to see if this file is an updated version of someting we alraedy have
+				//by checking for the name and the path where the file came from. obviously this isnt fool proof
+				//becasue if a file has been moved, it takes more effort to inspect the file and see if its similar to the old file
+				if (!stats.isFileUpdated().empty())
+				{
+					if (overriteOnUpdate)
+					{
+						//delete file in dest
+					}
+					else
+					{
+						//rename new file to have the date or 00X or something
+						
+					}
+				}
+				
+				string dest = getDestPathForFile(curFiles[j]);
+				SHCreateDirectoryEx(NULL, MyFileDirDll::getPathFromFullyQualifiedPathString(dest).c_str(), NULL);
 
 				//now that info is in DB, move the file to the new dir
 				if (moveFile)
 				{
 					if (!MoveFileA(curFiles[j].c_str(), dest.c_str()))
 					{
-						string err = ("Error moving file: " + curFiles[j] + "  " + to_string(GetLastError()));
+						string err = ("Error moving file: " + curFiles[j] + "  " + to_string(GetLastError()) + "\n");
 						//MessageBox(NULL, err.c_str(), NULL, NULL);
 						addEntryToDidntCopyFile(err);
 						continue;
 					}
-					else addEntryToCopyFile(curFiles[j]);
+					else addEntryToCopyFile(curFiles[j] + "\n");
 				}
 				else
 				{
 					if (!CopyFile(curFiles[j].c_str(), dest.c_str(), failIfFileExist))
 					{
-						string err = ("Error moving file: " +curFiles[j] +"  " + to_string(GetLastError()));
+						string err = ("Error moving file: " +curFiles[j] +"  " + to_string(GetLastError()) + "\n");
 						//MessageBox(NULL, err.c_str(), NULL, NULL);
 						addEntryToDidntCopyFile(err);
 						continue;
 					}
-					else addEntryToCopyFile(curFiles[j]);
+					else addEntryToCopyFile(curFiles[j] + "\n");
 				}
 
 			}
 			else
+			{
 				addEntryToDidntCopyFile("already have: " + curFiles[j]);
+			}
 		}
 	}
 }
