@@ -168,19 +168,22 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			srcPath = (char *)buffer2;
 
 			if (!doesRepoExist(destPath))
-				createRepo(destPath);
+				createRepo(destPath, numJobs);
 			else
 			{	
 				if(destPath[destPath.size()] != '\\')
 					curRepoFile = (destPath + "\\"+REPO_NAME);
 				else curRepoFile = (destPath + REPO_NAME);
 				string output;
-				if (!db.openDataBase(curRepoFile))
+				
+				openDBMultiThread(numJobs);
+
+				if (!dbConnection[0].openDataBase(curRepoFile))
 				{
 					MessageBox(NULL, "coudldnt open your old repo file", "Finihsed", MB_OK);
 					exit(-1);
 				}
-				db.setTableName("Repo");
+				
 			}
 
 			EnableWindow(mergeButton, false);
@@ -197,8 +200,6 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 
 				checkRepo(diskPAths);
 
-				//display finsihed message
-				// 6. with sprintf
 				char msg[30];
 				sprintf(msg, "num dupes ignored: %d", numDupes);
 				MessageBox(NULL, msg, "Finihsed", MB_OK);

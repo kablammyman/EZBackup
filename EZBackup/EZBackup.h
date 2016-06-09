@@ -51,9 +51,9 @@ string destPath;
 string srcPath;
 static string curMessage;
 int numDupes = 0;
-DataBase db;
+DataBase *dbConnection;
 string curRepoFile;
-
+int numJobs = 4;
 
 struct FileStats
 {
@@ -67,17 +67,17 @@ struct FileStats
 		return ("\"" + name + "\",\"" + hash + "\",\"" + path + "\"," + to_string(fileSize) + ",1");
 	};
 
-	string isHashInDB()
+	string isHashInDB(DataBase *db)
 	{
 		string output;
 		string querey = "SELECT * FROM Repo WHERE hash = \"";
 		querey += hash;
 		querey += "\"";
-		db.executeSQL(querey, output);
+		db->executeSQL(querey, output);
 		return output;
 	}
 
-	string isFileUpdated()
+	string isFileUpdated(DataBase *db)
 	{
 		//check to see if we have an updated version of a file we have
 		string output;
@@ -87,7 +87,7 @@ struct FileStats
 		querey = "AND path = \"";
 		querey += path;
 		querey += "\"";
-		db.executeSQL(querey, output);
+		db->executeSQL(querey, output);
 		return output;
 	}
 };
@@ -273,19 +273,45 @@ bool doesRepoExist(string path)
 	return true;
 }
 
-void createRepo(string path)
+void openDBMultiThread(int numConnections)
+{
+	dbConnection = new DataBase[numConnections];
+
+	for (size_t i = 0; i < numConnections; i++)
+	{
+		if (!dbConnection[i].openDataBase(curRepoFile))
+		{
+			UpdateStatusMessage("couldnt create thread " + i);
+		}
+		else
+		{
+			dbConnection[i].setTableName("Repo");
+		}
+	}
+}
+
+void createRepo(string path, int numConnections)
 {
 	curRepoFile = (path + "\\"+REPO_NAME);
-	if (!db.openDataBase(curRepoFile))
+	
+	openDBMultiThread( numConnections);
+
+	for (size_t i = 0; i < numConnections; i++)
 	{
-		MessageBox(NULL, "coudldnt create a repo file", "Uh Oh...", MB_OK);
+		if (!dbConnection[i].openDataBase(curRepoFile))
+		{
+			MessageBox(NULL, "coudldnt create a repo file", "Uh Oh...", MB_OK);
+			exit(-1);
+		}
+	}
+	
+	if (!dbConnection[0].createTable("Repo", "fileName TEXT, hash TEXT, path TEXT, fileSize INTEGER, version INTEGER"))
+	{
+		MessageBox(0, dbConnection[0].getLastError().c_str(), "Uh Oh...", MB_ICONEXCLAMATION | MB_OK);
 		exit(-1);
 	}
-	if (!db.createTable("Repo", "fileName TEXT, hash TEXT, path TEXT, fileSize INTEGER, version INTEGER"))
-	{
-		MessageBox(0, db.getLastError().c_str(), "Uh Oh...", MB_ICONEXCLAMATION | MB_OK);
-		exit(-1);
-	}
+	
+	
 
 	MyFileDirDll::startDirTreeStep(path);
 	while (!MyFileDirDll::isFinished())
@@ -296,7 +322,7 @@ void createRepo(string path)
 			continue;
 
 		list<string> curFiles = MyFileDirDll::getCurNodeFileList();
-
+		
 		for (list<string>::iterator it = curFiles.begin(); it != curFiles.end(); ++it)
 		{
 			string curFilePath = (curDir +"\\"+ *it);
@@ -309,7 +335,7 @@ void createRepo(string path)
 
 			string querey = stats.getInsertString();
 
-			if (!db.insertData(querey))
+			if (!dbConnection[i].insertData(querey))
 			{
 				//MessageBox(0, db.getLastError().c_str(), "Oh Oh...", MB_ICONEXCLAMATION | MB_OK);
 			}
@@ -369,7 +395,7 @@ void checkRepo(vector<string> &listOfDirs)
 			getFileStats(curFiles[j], stats);
 
 			//this is a new file, add it to the repo
-			if (stats.isHashInDB().empty())
+			if (stats.isHashInDB(&dbConnection[k]).empty())
 			{
 				string verQuerey = "select * from Repo where fileName LIKE \"" + MyFileDirDll::getFileNameFromPathString(curFiles[j]) +"\"";
 				UpdateStatusMessage("to repo-> " + curFiles[j]);
@@ -379,16 +405,16 @@ void checkRepo(vector<string> &listOfDirs)
 
 				}*/
 				string querey = stats.getInsertString();
-				if (!db.insertData(querey))
+				if (!dbConnection[k].insertData(querey))
 				{
-					MessageBox(0, db.getLastError().c_str(), "Oh Oh...", MB_ICONEXCLAMATION | MB_OK);
+					MessageBox(0, dbConnection[k].getLastError().c_str(), "Oh Oh...", MB_ICONEXCLAMATION | MB_OK);
 					continue;
 				}
 				
-				//checl to see if this file is an updated version of someting we alraedy have
+				//check to see if this file is an updated version of someting we alraedy have
 				//by checking for the name and the path where the file came from. obviously this isnt fool proof
 				//becasue if a file has been moved, it takes more effort to inspect the file and see if its similar to the old file
-				if (!stats.isFileUpdated().empty())
+				if (!stats.isFileUpdated(&dbConnection[k]).empty())
 				{
 					if (overriteOnUpdate)
 					{
@@ -434,6 +460,7 @@ void checkRepo(vector<string> &listOfDirs)
 			}
 			else
 			{
+				numDupes++;
 				string msg = "already have: " + curFiles[j] + "\r\n";
 				UpdateStatusMessage(msg);
 				addEntryToDidntCopyFile(msg);
@@ -452,7 +479,7 @@ void getRepoData(string path, vector<string> &dbPAths)
 	//parse all the files in the "repo" and add them to the db if not in already
 	string querey, output;
 	querey = "SELECT * FROM Repo";
-	db.executeSQL(querey, output);
+	dbConnection[0].executeSQL(querey, output);
 
 	sort(dbPAths.begin(), dbPAths.end());
 	
