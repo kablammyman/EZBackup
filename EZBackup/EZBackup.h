@@ -19,12 +19,17 @@
 #define MERGE_FILES 14
 
 #define REPO_NAME "repo.db"
+#define VERSION_STRING "ezbak_"
+
 // Global Variables:
 HINSTANCE hInst;								// current instance
 TCHAR szTitle[MAX_LOADSTRING];					// The title bar text
 TCHAR szWindowClass[MAX_LOADSTRING];			// the main window class name
 
-												// Forward declarations of functions included in this code module:
+HWND mergeButton;	
+HWND mainWindow;
+
+// Forward declarations of functions included in this code module:
 ATOM				MyRegisterClass(HINSTANCE hInstance);
 BOOL				InitInstance(HINSTANCE, int);
 LRESULT CALLBACK	WndProc(HWND, UINT, WPARAM, LPARAM);
@@ -44,6 +49,7 @@ using namespace std;
 
 string destPath;
 string srcPath;
+static string curMessage;
 int numDupes = 0;
 DataBase db;
 string curRepoFile;
@@ -88,6 +94,12 @@ struct FileStats
 
 
 //---------------------------------------------------------------------------------------------------------
+void UpdateStatusMessage(string msg)
+{
+	curMessage = msg;
+	RedrawWindow(mainWindow, NULL, NULL, RDW_INVALIDATE);
+}
+
 int addEntryToDidntCopyFile(string message)
 {
 	FILE * pFile;
@@ -318,6 +330,26 @@ string getDestPathForFile(string curFile)
 	
 }
 
+void addVersionToFileName(string &fileName, int ver)
+{
+	size_t dot = fileName.find('.');
+	string newName = (VERSION_STRING + to_string(ver));
+	//if thers no dot, just put version at end of name
+	if(dot == string::npos)
+		fileName += newName;
+	else
+		fileName.insert(dot-1, newName);
+}
+
+bool isVersionedFile(string fileName)
+{
+	size_t found = fileName.find(VERSION_STRING);
+	
+	if (found == string::npos)
+		return false;
+
+	return true;
+}
 void checkRepo(vector<string> &listOfDirs)
 {
 	for (size_t i = 0; i < listOfDirs.size(); i++)
@@ -336,9 +368,16 @@ void checkRepo(vector<string> &listOfDirs)
 			FileStats stats;
 			getFileStats(curFiles[j], stats);
 
-			//this is a new filoe, add it to the repo
+			//this is a new file, add it to the repo
 			if (stats.isHashInDB().empty())
 			{
+				string verQuerey = "select * from Repo where fileName LIKE \"" + MyFileDirDll::getFileNameFromPathString(curFiles[j]) +"\"";
+				UpdateStatusMessage("to repo-> " + curFiles[j]);
+				//find if we have a similar file somehow...
+				/*if (isVersionedFile(string fileName))
+				{
+
+				}*/
 				string querey = stats.getInsertString();
 				if (!db.insertData(querey))
 				{
@@ -358,7 +397,7 @@ void checkRepo(vector<string> &listOfDirs)
 					else
 					{
 						//rename new file to have the date or 00X or something
-						
+						//addVersionToFileName(curFiles[j], int ver);
 					}
 				}
 				
@@ -368,17 +407,20 @@ void checkRepo(vector<string> &listOfDirs)
 				//now that info is in DB, move the file to the new dir
 				if (moveFile)
 				{
+					UpdateStatusMessage("moving -> " + curFiles[j]);
 					if (!MoveFileA(curFiles[j].c_str(), dest.c_str()))
 					{
-						string err = ("Error moving file: " + curFiles[j] + "  " + to_string(GetLastError()) + "\n");
+						string err = ("Error moving file: " + curFiles[j] + "  " + to_string(GetLastError()) + "\r\n");
 						//MessageBox(NULL, err.c_str(), NULL, NULL);
 						addEntryToDidntCopyFile(err);
+						UpdateStatusMessage(err);
 						continue;
 					}
-					else addEntryToCopyFile(curFiles[j] + "\n");
+					else addEntryToCopyFile(curFiles[j] + "\r\n");
 				}
 				else
 				{
+					UpdateStatusMessage("copy -> " + curFiles[j]);
 					if (!CopyFile(curFiles[j].c_str(), dest.c_str(), failIfFileExist))
 					{
 						string err = ("Error moving file: " +curFiles[j] +"  " + to_string(GetLastError()) + "\n");
@@ -386,16 +428,20 @@ void checkRepo(vector<string> &listOfDirs)
 						addEntryToDidntCopyFile(err);
 						continue;
 					}
-					else addEntryToCopyFile(curFiles[j] + "\n");
+					else addEntryToCopyFile(curFiles[j] + "\r\n");
 				}
 
 			}
 			else
 			{
-				addEntryToDidntCopyFile("already have: " + curFiles[j]);
+				string msg = "already have: " + curFiles[j] + "\r\n";
+				UpdateStatusMessage(msg);
+				addEntryToDidntCopyFile(msg);
 			}
 		}
 	}
+	UpdateStatusMessage("done!");
+	EnableWindow(mergeButton, true);
 }
 
 

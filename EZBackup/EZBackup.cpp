@@ -97,17 +97,16 @@ ATOM MyRegisterClass(HINSTANCE hInstance)
 //
 BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 {
-	HWND hWnd;
 	hInst = hInstance; // Store instance handle in our global variable
 					   //hWnd = CreateWindow(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, NULL, NULL, hInstance, NULL);
-	hWnd = CreateWindow(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, 0, winWidth, winHeight, NULL, NULL, hInstance, NULL);
-	if (!hWnd)
+	mainWindow = CreateWindow(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW, CW_USEDEFAULT, 0, winWidth, winHeight, NULL, NULL, hInstance, NULL);
+	if (!mainWindow)
 	{
 		return FALSE;
 	}
 
-	ShowWindow(hWnd, nCmdShow);
-	UpdateWindow(hWnd);
+	ShowWindow(mainWindow, nCmdShow);
+	UpdateWindow(mainWindow);
 
 	return TRUE;
 }
@@ -133,10 +132,10 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	case WM_CREATE:
 		CreateWindow("BUTTON", "Destination", WS_VISIBLE | WS_CHILD, baseX, baseY, buttonW, buttonH, hWnd, (HMENU)(FILE_OPEN_1), NULL, 0);
 		CreateWindow("BUTTON", "Source", WS_VISIBLE | WS_CHILD, baseX, baseY * 4, buttonW, buttonH, hWnd, (HMENU)(FILE_OPEN_2), NULL, 0);
-		CreateWindow("BUTTON", "MERGE!!", WS_VISIBLE | WS_CHILD, baseX, baseY * 8, buttonW, buttonH, hWnd, (HMENU)(MERGE_FILES), NULL, 0);
+		mergeButton = CreateWindow("BUTTON", "MERGE!!", WS_VISIBLE | WS_CHILD, baseX, baseY * 8, buttonW, buttonH, hWnd, (HMENU)(MERGE_FILES), NULL, 0);
 		CreateWindow("Edit", destPath.c_str(), WS_CHILD | WS_VISIBLE | WS_BORDER, baseX + buttonW + 20, baseY, MAX_PATH * 8, 20, hWnd, (HMENU)FILE_PATH_1, NULL, NULL);
 		CreateWindow("Edit", srcPath.c_str(), WS_CHILD | WS_VISIBLE | WS_BORDER, baseX + buttonW + 20, baseY * 4, MAX_PATH * 8, 20, hWnd, (HMENU)FILE_PATH_2, NULL, NULL);
-
+		UpdateStatusMessage("waiting...");
 		break;
 
 	case WM_COMMAND:
@@ -183,19 +182,30 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 				}
 				db.setTableName("Repo");
 			}
-			vector<string> diskPAths;
 
-			MyFileDirDll::clearDirTree();
-			MyFileDirDll::addDirTree(srcPath,10);
-			MyFileDirDll::dumpTreeToVector("",diskPAths,false);
+			EnableWindow(mergeButton, false);
 
-			checkRepo(diskPAths);
+			thread doWork([]()
+			{
+				UpdateStatusMessage("started");
+				vector<string> diskPAths;
 
-			//display finsihed message
-			// 6. with sprintf
-			char msg[30];
-			sprintf(msg, "num dupes ignored: %d", numDupes);
-			MessageBox(NULL, msg, "Finihsed", MB_OK);
+				MyFileDirDll::clearDirTree();
+				UpdateStatusMessage("find all files and dirs in " + srcPath);
+				MyFileDirDll::addDirTree(srcPath, 10);
+				MyFileDirDll::dumpTreeToVector("", diskPAths, false);
+
+				checkRepo(diskPAths);
+
+				//display finsihed message
+				// 6. with sprintf
+				char msg[30];
+				sprintf(msg, "num dupes ignored: %d", numDupes);
+				MessageBox(NULL, msg, "Finihsed", MB_OK);
+			});
+			doWork.detach();
+
+		
 
 		}
 
@@ -218,6 +228,7 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 	case WM_PAINT:
 		hdc = BeginPaint(hWnd, &ps);
 		//TextOutA(hdc,10,10,"hello world",11);
+		TextOutA(hdc, baseX + buttonW + 20, baseY * 8, curMessage.c_str(), curMessage.size());
 		EndPaint(hWnd, &ps);
 		break;
 	case WM_DESTROY:
